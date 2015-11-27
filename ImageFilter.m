@@ -44,25 +44,18 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+Copyright © 2005-2012 Apple Inc. All Rights Reserved.
 
 */
 
 #import "ImageFilter.h"
-
+#import "ImageDoc.h"
 
 @implementation ImageFilter
 
 - (void) dealloc
 {
     CGImageRelease(mImage);
-    [mCIImage release];
-    [mProfile release];
-    [mCIExposure release];
-    [mCIColorControls release];
-    [mCIColorCube release];
-
-    [super dealloc];
 }
 
 
@@ -71,21 +64,186 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
     if ((self = [super init]))
     {
         mImage = CGImageRetain(image);
-        mCIImage = [[CIImage imageWithCGImage:mImage] retain];
+        mCIImage = [CIImage imageWithCGImage:mImage];
     }
     return self;
 }
 
-// specify profile for use with image effect transform
+
 //
+// Build a 3D lookup texture for use with soft-proofing
+// The resulting table is suitable for use in OpenGL to accelerate   
+// color management in hardware.
+//
+
+- (void) setColorCubeFilterDataForGridPoints:(size_t)gridPoints
+{
+    CFDataRef   data = NULL;
+    
+    Boolean     success = true;
+    size_t      count = (gridPoints*gridPoints*gridPoints) * 4;
+    size_t      size = count * sizeof(float);
+    float*      floatData = (float*) malloc (size);
+    
+    if (floatData == NULL)
+        success = false;
+    
+    if (success) 
+    {
+        Profile*    linRGB = [Profile profileWithLinearRGB];
+        
+        if (linRGB == nil)
+            success = false;
+        
+        if (success) 
+        {
+            const void *keys[] = {kColorSyncProfile, kColorSyncRenderingIntent, kColorSyncTransformTag};
+            
+            const void *srcVals[] = {[linRGB ref],  kColorSyncRenderingIntentUseProfileHeader, kColorSyncTransformDeviceToPCS};
+            const void *midVals[] = {[mProfile ref],    kColorSyncRenderingIntentUseProfileHeader, kColorSyncTransformPCSToPCS};
+            const void *dstVals[] = {[linRGB ref],  kColorSyncRenderingIntentUseProfileHeader, kColorSyncTransformPCSToDevice};
+            
+            CFDictionaryRef srcDict = CFDictionaryCreate (
+                                                          NULL,
+                                                          (const void **)keys,
+                                                          (const void **)srcVals,
+                                                          3,
+                                                          &kCFTypeDictionaryKeyCallBacks,
+                                                          &kCFTypeDictionaryValueCallBacks);
+            
+            CFDictionaryRef midDict = CFDictionaryCreate (
+                                                          NULL,
+                                                          (const void **)keys,
+                                                          (const void **)midVals,
+                                                          3,
+                                                          &kCFTypeDictionaryKeyCallBacks,
+                                                          &kCFTypeDictionaryValueCallBacks);
+            
+            CFDictionaryRef dstDict = CFDictionaryCreate (
+                                                          NULL,
+                                                          (const void **)keys,
+                                                          (const void **)dstVals,
+                                                          3,
+                                                          &kCFTypeDictionaryKeyCallBacks,
+                                                          &kCFTypeDictionaryValueCallBacks);
+            
+            const void* arrayVals[] = {srcDict, midDict, dstDict, NULL};
+            
+            CFArrayRef profileSequence = CFArrayCreate(NULL, (const void **)arrayVals, 3, &kCFTypeArrayCallBacks);
+            
+            ColorSyncTransformRef transform = ColorSyncTransformCreate (profileSequence, NULL);
+            
+            if (srcDict) CFRelease (srcDict);
+            if (midDict) CFRelease (midDict);
+            if (dstDict) CFRelease (dstDict);
+            
+            if (profileSequence) CFRelease (profileSequence);
+            
+            if (transform == NULL)
+                success = false;
+            
+            if (success) 
+            {
+                CFDataRef colorSyncTexture = NULL;
+                
+                uint8_t gridPoints8Bit = (uint8_t) gridPoints;
+                
+                const void* optKeys[] = {kColorSyncConversionGridPoints, NULL};
+                
+                const void* optVals[] = {CFNumberCreate (NULL, kCFNumberSInt8Type, &gridPoints8Bit), NULL};
+                
+                CFDictionaryRef options = CFDictionaryCreate (
+                                                              NULL,
+                                                              (const void **)optKeys,
+                                                              (const void **)optVals,
+                                                              1,
+                                                              &kCFTypeDictionaryKeyCallBacks,
+                                                              &kCFTypeDictionaryValueCallBacks);
+                
+                CFRelease (optVals[0]);
+                
+                CFArrayRef array = ColorSyncTransformCopyProperty(transform,
+                                                                  kColorSyncTransformSimplifiedConversionData,
+                                                                  options);
+                
+                if (options) CFRelease (options);
+                
+                if (transform) CFRelease (transform);
+                
+                if (array)
+                {
+                    CFDictionaryRef dict = (CFDictionaryRef) CFArrayGetValueAtIndex (array, 0);
+                    
+                    if (dict)
+                    {
+                        colorSyncTexture = (CFDataRef) CFDictionaryGetValue (dict, kColorSyncConversion3DLut);
+                    }
+                }
+                
+                if (colorSyncTexture)
+                {
+                    uint16_t* clutPtr, *clutBase = (uint16_t*)CFDataGetBytePtr (colorSyncTexture);
+                    size_t rr, gg, bb;
+                    
+                    float*    ptrFl;
+                    ptrdiff_t clutOffset = 0, dataOffset = 0;
+                    
+                    for (bb = 0; bb < gridPoints; bb++)
+                    {
+                        for (gg = 0; gg < gridPoints; gg++)
+                        {
+                            for (rr = 0; rr < gridPoints; rr++)
+                            {
+                                dataOffset = (bb * gridPoints * gridPoints + gg *gridPoints + rr) * 4;
+                                clutOffset = (rr * gridPoints * gridPoints + gg *gridPoints + bb) * 3;
+                                
+                                clutPtr = clutBase + clutOffset;
+                                
+                                ptrFl = floatData + dataOffset;
+                                ptrFl[0] = ((float)clutPtr[0])/(float)65535.0;
+                                if (ptrFl[0] > (float) 1.0) ptrFl[0] = 1.0f;
+                                if (ptrFl[0] < (float) 0.0) ptrFl[0] = 0.0f;
+                                ptrFl[1] = ((float)clutPtr[1])/(float)65535.0;
+                                if (ptrFl[1] > (float) 1.0) ptrFl[1] = 1.0f;
+                                if (ptrFl[1] < (float) 0.0) ptrFl[1] = 0.0f;
+                                ptrFl[2] = ((float)clutPtr[2])/(float)65535.0;
+                                if (ptrFl[2] > (float) 1.0) ptrFl[2] = 1.0f;
+                                if (ptrFl[2] < (float) 0.0) ptrFl[2] = 0.0f;
+                                ptrFl[3] = 1.0f;
+                            }
+                        }
+                    }
+                }
+                
+                if (array) 
+                {
+                    CFRelease (array);
+                }
+                
+                data = CFDataCreate (NULL, (uint8_t*)floatData, size);
+                
+                [mCIColorCube setValue:(__bridge id)data forKey:@"inputCubeData"];
+                
+                CFRelease (data);
+
+            }
+
+        }
+
+    }
+
+    if (floatData) 
+        free(floatData);
+}
+
+
+// specify profile for use with image effect transform
 - (void) setProfile:(Profile*)profile
 {
-    [mProfile release];
-    mProfile = [profile retain];
+    mProfile = profile;
 
     if (mProfile == nil)
     {
-        [mCIColorCube autorelease];
         mCIColorCube = nil;
     }
     else
@@ -93,14 +251,14 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
         // Use the CIColorCube filter three-dimensional color table 
         // to transform the source image pixels
         if (mCIColorCube == nil)
-            mCIColorCube = [[CIFilter filterWithName: @"CIColorCube"] retain];
+            mCIColorCube = [CIFilter filterWithName: @"CIColorCube"];
         
         // Get the transformed data
         static const int kSoftProofGrid = 32;
-        NSData *data = [mProfile dataForCISoftproofTextureWithGridSize:kSoftProofGrid];
+
+        // Specify Cube Data for the CIColorCube filter
+        [self setColorCubeFilterDataForGridPoints:kSoftProofGrid];
         
-        [mCIColorCube setValue:data
-            forKey:@"inputCubeData"];
         [mCIColorCube setValue:[NSNumber numberWithInt:kSoftProofGrid]
             forKey:@"inputCubeDimension"];
     }
@@ -113,7 +271,7 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 - (void) setExposure:(NSNumber *)exposure
 {
     if (mCIExposure == nil)
-        mCIExposure = [[CIFilter filterWithName: @"CIExposureAdjust"] retain];
+        mCIExposure = [CIFilter filterWithName: @"CIExposureAdjust"];
 
     [mCIExposure setValue:exposure
         forKey: @"inputEV"];
@@ -124,7 +282,7 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 - (void) setSaturation:(NSNumber *)saturation
 {
     if (mCIColorControls == nil)
-        mCIColorControls = [[CIFilter filterWithName: @"CIColorControls"] retain];
+        mCIColorControls = [CIFilter filterWithName: @"CIColorControls"];
 
     // set new saturation value
     [mCIColorControls setValue:saturation
@@ -177,87 +335,210 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 }
 
 
-- (CGImageRef) createCGImage
+
+-(size_t)imageBytesPerRow:(icColorSpaceSignature)colorSpace
 {
-    if (mImage==nil)
-        return nil;
-
-    Profile* prof = mProfile;
-    if (mProfile==nil)
-        prof = [Profile profileWithGenericRGB];
-
-    // calculate bits per pixel and row bytes and alphaInfo
-    size_t height = CGImageGetHeight(mImage);
-    size_t width = CGImageGetWidth(mImage);
-    CGRect rect = {{0,0}, {width, height}};
-    size_t bitsPerComponent = 8;
     size_t bytesPerRow = 0;
-    CGImageAlphaInfo alphaInfo = kCGImageAlphaNone;
-
-    switch ([prof spaceType])
+    size_t width = CGImageGetWidth(mImage);
+    
+    switch (colorSpace)
     {
-        case cmGrayData:
+        case icSigGrayData:
             bytesPerRow = width;
+            break;
+        case icSigRgbData:
+            bytesPerRow = width*4;
+            break;
+        case icSigCmykData:
+            bytesPerRow = width*4;
+            break;
+        default:
+            break;
+    }
+    
+    return (bytesPerRow);
+}
+
+-(CGImageAlphaInfo)imageAlphaInfo:(icColorSpaceSignature)colorSpace
+{
+    CGImageAlphaInfo alphaInfo = kCGImageAlphaNone;
+    
+    switch (colorSpace)
+    {
+        case icSigGrayData:
             alphaInfo = kCGImageAlphaNone; /* RGB. */
             break;
-        case cmRGBData:
-            bytesPerRow = width*4;
+        case icSigRgbData:
             alphaInfo = kCGImageAlphaPremultipliedLast; /* premultiplied RGBA */
             break;
-        case cmCMYKData:
-            bytesPerRow = width*4;
+        case icSigCmykData:
             alphaInfo = kCGImageAlphaNone; /* RGB. */
             break;
         default:
-            return nil;
             break;
     }
 
-    CGContextRef context = CGBitmapContextCreate(nil, width, height,
-                                    bitsPerComponent, bytesPerRow,
-                                    [prof colorspace], alphaInfo);
+    return (alphaInfo);
+}
 
-    CIContext* cicontext = [CIContext contextWithCGContext: context options: nil];
+-(void)fillContextWithWhite:(CGContextRef)context fillRect:(CGRect)fillRect
+{
+    CGColorSpaceRef graySpace = CGColorSpaceCreateDeviceGray();
+    const CGFloat whiteComps[2] = {1.0, 1.0};
+    CGColorRef whiteColor = CGColorCreate(graySpace, whiteComps);
+    CFRelease(graySpace);
+    CGContextSetFillColorWithColor(context, whiteColor);
+    CGContextFillRect(context, fillRect);
+    CFRelease(whiteColor);
+}
 
-    // If context doesn't support alpha then first fill it with white.
-    // That is most likely to be desireable.
-    if (alphaInfo == kCGImageAlphaNone)
-    {
-        CGColorSpaceRef graySpace = CGColorSpaceCreateDeviceGray();
-        const float whiteComps[2] = {1.0, 1.0};
-        CGColorRef whiteColor = CGColorCreate(graySpace, whiteComps);
-        CFRelease(graySpace);
-        CGContextSetFillColorWithColor(context, whiteColor);
-        CGContextFillRect(context, rect);
-        CFRelease(whiteColor);
-    }
-
-    CIImage* ciimg = mCIImage;
-
+-(void)renderImageWithExposureAdjustment:(CIImage *)ciimg context:(CIContext *)cicontext rect:(CGRect)rect
+{
     // exposure adjustment
     if (mCIExposure)
     {
         [mCIExposure setValue:ciimg forKey:@"inputImage"];
         ciimg = [mCIExposure valueForKey: @"outputImage"];
     }
-
+    
     // three-dimensional color table adjustment
     if (mCIColorControls)
     {
         [mCIColorControls setValue:ciimg forKey:@"inputImage"];
         ciimg = [mCIColorControls valueForKey: @"outputImage"];
     }
-
-
+    
     CGRect extent = [ciimg extent];
-
+    
     [cicontext drawImage: ciimg inRect:rect fromRect:extent];
+}
 
+-(void)drawFilteredImage:(CGContextRef) drawContext imageRect:(CGRect)drawImageRect
+{
+    if (mImage==nil)
+        return;
+    
+    // calculate bits per pixel and row bytes and alphaInfo
+    size_t bitsPerComponent = 8;
+    
+    Profile* prof = mProfile;
+    if (mProfile==nil)
+        prof = [Profile profileWithSRGB];
+
+    size_t bytesPerRow = [self imageBytesPerRow:[prof spaceType]];
+    
+    CGImageAlphaInfo alphaInfo = [self imageAlphaInfo:[prof spaceType]];
+        
+    CGContextRef context = CGBitmapContextCreate(nil, CGImageGetWidth(mImage), CGImageGetHeight(mImage),
+                                                 bitsPerComponent, bytesPerRow,
+                                                 [prof colorspace], alphaInfo);
+    
+    CIContext* cicontext = [CIContext contextWithCGContext: context options: nil];
+
+    CGRect rect = CGRectMake (
+                              0,
+                              0,
+                              CGImageGetWidth(mImage),
+                              CGImageGetHeight(mImage)
+                              );
+
+    // If context doesn't support alpha then first fill it with white.
+    // That is most likely to be desireable.
+    if (alphaInfo == kCGImageAlphaNone)
+    {
+        [self fillContextWithWhite:context fillRect:rect];        
+    }
+    
+    [self renderImageWithExposureAdjustment:mCIImage context:cicontext rect:rect];
+    
+    // create filtered image
     CGImageRef image = CGBitmapContextCreateImage(context);
-
+    
     CGContextRelease(context);
 
-    return image;
+    
+    // draw image to destination context
+    CGContextDrawImage(drawContext, drawImageRect, image);
+
+    CGImageRelease(image);
+}
+
+
+- (BOOL) writeImageToURL:(NSURL *)absURL ofType:(NSString *)typeName properties:(CFDictionaryRef)properties error:(NSError **)outError
+{
+    BOOL success = YES;
+    CGImageDestinationRef dest = nil;
+    
+    if (mImage==nil)
+        success = NO;
+    
+    if (success == YES) 
+    {
+        // Create an image destination writing to `url'
+        dest = CGImageDestinationCreateWithURL((__bridge CFURLRef)absURL, (__bridge CFStringRef)typeName, 1, nil);
+        if (dest==nil)
+            success = NO;
+    }
+    
+    if (success == YES) 
+    {
+        // calculate bits per pixel and row bytes and alphaInfo
+        size_t bitsPerComponent = 8;
+
+        Profile* prof = mProfile;
+        if (mProfile==nil)
+        {
+            prof = [Profile profileWithSRGB];
+        }
+
+        size_t bytesPerRow = [self imageBytesPerRow:[prof spaceType]];
+
+        CGImageAlphaInfo alphaInfo = [self imageAlphaInfo:[prof spaceType]];
+
+        CGContextRef context = CGBitmapContextCreate(nil, CGImageGetWidth(mImage), CGImageGetHeight(mImage),
+                                                     bitsPerComponent, bytesPerRow,
+                                                     [prof colorspace], alphaInfo);
+
+        CIContext* cicontext = [CIContext contextWithCGContext: context options: nil];
+
+        CGRect rect = CGRectMake (
+                                  0,
+                                  0,
+                                  CGImageGetWidth(mImage),
+                                  CGImageGetHeight(mImage)
+                                  );
+
+        // If context doesn't support alpha then first fill it with white.
+        // That is most likely to be desireable.
+        if (alphaInfo == kCGImageAlphaNone)
+        {
+            [self fillContextWithWhite:context fillRect:rect];        
+        }
+
+        [self renderImageWithExposureAdjustment:mCIImage context:cicontext rect:rect];
+
+        CGImageRef image = nil;
+        
+        // create filtered image
+        image = CGBitmapContextCreateImage(context);
+
+        CGContextRelease(context);
+
+        // Set the image in the image destination to be `image' with
+        // optional properties specified in saved properties dict.
+        CGImageDestinationAddImage(dest, image, properties);
+        
+        success = CGImageDestinationFinalize(dest);
+        
+        CFRelease(dest);
+        
+        CGImageRelease(image);
+    }
+    
+    if (success==NO && outError)
+        *outError = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileWriteUnknownError userInfo:nil];
+    
+    return success; 
 }
 
 @end

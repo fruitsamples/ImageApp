@@ -49,42 +49,44 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 */
 
 #import <Cocoa/Cocoa.h>
+#import "ICC.h"
 
 @interface Profile : NSObject
 {
-    CMProfileRef		mRef;
-    CGColorSpaceRef		mColorspace;
-    CMProfileLocation	mLocation;
-    OSType				mClass;
-    OSType				mSpace;
-    NSString*			mName;
-    NSString*			mPath;
+    ColorSyncProfileRef     mRef;
+    CGColorSpaceRef         mColorspace;
+    CFURLRef                mURL;
+    icProfileClassSignature mClass;
+    icColorSpaceSignature   mSpace;
+    CFStringRef             mName;
+    CFStringRef             mPath;
 }
 
 + (NSArray*) arrayOfAllProfiles;
-+ (NSArray*) arrayOfAllProfilesWithSpace:(OSType)space;
++ (NSArray*) arrayOfAllProfilesWithSpace:(icColorSpaceSignature)space;
 
 + (Profile*) profileDefaultRGB;
 + (Profile*) profileDefaultGray;
 + (Profile*) profileDefaultCMYK;
 
-+ (Profile*) profileWithIterateData:(CMProfileIterateData*) data;
-- (Profile*) initWithIterateData:(CMProfileIterateData*) data;
-+ (Profile*) profileWithPath:(NSString*) path;
-- (Profile*) initWithPath:(NSString*) path;
-+ (Profile*) profileWithGenericRGB;
-- (Profile*) initWithGenericRGB;
++ (Profile*) profileWithIterateData:(CFDictionaryRef) data;
+- (Profile*) initWithIterateData:(CFDictionaryRef) data;
++ (Profile*) profileWithPath:(CFStringRef) path;
+- (Profile*) initWithCFPath:(CFStringRef) path;
++ (Profile*) profileWithSRGB;
+- (Profile*) initWithSRGB;
 + (Profile*) profileWithLinearRGB;
 - (Profile*) initWithLinearRGB;
 
-- (CMProfileRef) ref;
-- (CMProfileLocation*) location;
-- (OSType) classType;
-- (OSType) spaceType;
+- (ColorSyncProfileRef) ref;
+- (CFURLRef) url;
+- (icProfileClassSignature) classType;
+- (icColorSpaceSignature) spaceType;
+- (NSString*) description;
 - (NSString*) path;
 - (CGColorSpaceRef) colorspace;
 
-- (NSData*) dataForCISoftproofTextureWithGridSize:(size_t) grid;
+- (id) valueForUndefinedKey:(NSString*)key;
 
 @end
 

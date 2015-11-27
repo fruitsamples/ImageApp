@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 42;
+	objectVersion = 46;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -26,6 +26,7 @@
 		63BCE3410843F23700160D0B /* ImageDocController.m in Sources */ = {isa = PBXBuildFile; fileRef = 63BCE33F0843F23700160D0B /* ImageDocController.m */; };
 		63D9DA1F083EA792003E9D4D /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0DAB2146FF2CE72011CA29B8 /* Cocoa.framework */; };
 		63D9DF87083EB1CF003E9D4D /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 63D9DF85083EB1CF003E9D4D /* Credits.rtf */; };
+		AF3BB58214450CFC00CAF434 /* ICC.h in Headers */ = {isa = PBXBuildFile; fileRef = AF3BB58114450CFC00CAF434 /* ICC.h */; };
 		D2170C830640A89100D81B04 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 015DA13BFF262C1C11653029 /* InfoPlist.strings */; };
 		D2170C850640A89100D81B04 /* MainMenu.nib in Resources */ = {isa = PBXBuildFile; fileRef = 0156CBC6FFD3688311CA254A /* MainMenu.nib */; };
 		D2170C8D0640A89100D81B04 /* ImageDoc.nib in Resources */ = {isa = PBXBuildFile; fileRef = D784C248045E7B5300F66A86 /* ImageDoc.nib */; };
@@ -70,8 +71,9 @@
 		63BCE33E0843F23700160D0B /* ImageDocController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ImageDocController.h; sourceTree = "<group>"; };
 		63BCE33F0843F23700160D0B /* ImageDocController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ImageDocController.m; sourceTree = "<group>"; };
 		63D9DF86083EB1CF003E9D4D /* English */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = English; path = Resources/English.lproj/Credits.rtf; sourceTree = "<group>"; };
+		AF3BB58114450CFC00CAF434 /* ICC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ICC.h; sourceTree = "<group>"; };
 		D2170CF70640A89100D81B04 /* ImageApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ImageApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D2170DA50640AB9500D81B04 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.xml; name = Info.plist; path = Resources/Info.plist; sourceTree = "<group>"; };
+		D2170DA50640AB9500D81B04 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.plist.xml; name = Info.plist; path = Resources/Info.plist; sourceTree = "<group>"; };
 		D784C249045E7B5300F66A86 /* English */ = {isa = PBXFileReference; lastKnownFileType = wrapper.nib; name = English; path = Resources/English.lproj/ImageDoc.nib; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -112,6 +114,7 @@
 		08E8075FFEB0FDBE11CA29B8 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				AF3BB58114450CFC00CAF434 /* ICC.h */,
 				635270AD083971010045672E /* ImageApp.h */,
 				635270AE083971010045672E /* ImageApp.m */,
 				63BCE33E0843F23700160D0B /* ImageDocController.h */,
@@ -173,6 +176,7 @@
 				635270BF083971010045672E /* Profile.h in Headers */,
 				63346A92083E50F40020B2B9 /* ImageFilter.h in Headers */,
 				63BCE3400843F23700160D0B /* ImageDocController.h in Headers */,
+				AF3BB58214450CFC00CAF434 /* ICC.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,10 +209,19 @@
 /* Begin PBXProject section */
 		08E80759FEB0FDBE11CA29B8 /* Project object */ = {
 			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0420;
+			};
 			buildConfigurationList = AF51E1450D3D55650051A72A /* Build configuration list for PBXProject "ImageApp" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
 			hasScannedForEncodings = 1;
+			knownRegions = (
+				en,
+			);
 			mainGroup = 08E8075AFEB0FDBE11CA29B8 /* DiskUtility */;
 			projectDirPath = "";
+			projectRoot = "";
 			targets = (
 				D2170C530640A89100D81B04 /* ImageApp */,
 			);
@@ -296,16 +309,20 @@
 		AF51E1420D3D55650051A72A /* Development */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_WARN_OBJCPP_ARC_ABI = YES;
+				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
 				COPY_PHASE_STRIP = NO;
-				GCC_ENABLE_FIX_AND_CONTINUE = NO;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				LIBRARY_SEARCH_PATHS = "";
 				OPTIMIZATION_CFLAGS = "-O0";
 				OTHER_CFLAGS = "-no-cpp-precomp";
+				OTHER_CODE_SIGN_FLAGS = "i386 x86_64";
 				PRODUCT_NAME = ImageApp;
+				VALID_ARCHS = x86_64;
 				WARNING_CFLAGS = (
 					"-Wmost",
 					"-Wno-four-char-constants",
@@ -319,15 +336,19 @@
 		AF51E1430D3D55650051A72A /* Deployment */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_WARN_OBJCPP_ARC_ABI = YES;
+				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
 				COPY_PHASE_STRIP = YES;
-				GCC_ENABLE_FIX_AND_CONTINUE = NO;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_CFLAGS = "-no-cpp-precomp";
+				OTHER_CODE_SIGN_FLAGS = "i386 x86_64";
 				PRODUCT_NAME = ImageApp;
+				VALID_ARCHS = x86_64;
 				WARNING_CFLAGS = (
 					"-Wmost",
 					"-Wno-four-char-constants",
@@ -341,12 +362,17 @@
 		AF51E1440D3D55650051A72A /* Default */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_WARN_OBJCPP_ARC_ABI = YES;
+				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_CFLAGS = "-no-cpp-precomp";
+				OTHER_CODE_SIGN_FLAGS = "i386 x86_64";
 				PRODUCT_NAME = ImageApp;
+				VALID_ARCHS = x86_64;
 				WARNING_CFLAGS = (
 					"-Wmost",
 					"-Wno-four-char-constants",
@@ -359,27 +385,47 @@
 		AF51E1460D3D55650051A72A /* Development */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_OBJCPP_ARC_ABI = YES;
+				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
 				COPY_PHASE_STRIP = NO;
-				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
 				STRIP_INSTALLED_PRODUCT = NO;
+				VALID_ARCHS = x86_64;
 			};
 			name = Development;
 		};
 		AF51E1470D3D55650051A72A /* Deployment */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = (
-					ppc,
-					i386,
-				);
-				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_OBJCPP_ARC_ABI = YES;
+				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				VALID_ARCHS = x86_64;
 			};
 			name = Deployment;
 		};
 		AF51E1480D3D55650051A72A /* Default */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_OBJCPP_ARC_ABI = YES;
+				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				VALID_ARCHS = x86_64;
 			};
 			name = Default;
 		};

@@ -44,7 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. Inc. All Rights Reserved.
+Copyright © 2005-2012 Apple Inc. Inc. All Rights Reserved.
 
 */
 
@@ -115,10 +115,10 @@ static NSString* ImageIOLocalizedString (NSString* key)
 - (NSString*) typeForContentsOfURL:(NSURL *)absURL error:(NSError **)outError
 {
     NSString* type = nil;
-    CGImageSourceRef isrc = CGImageSourceCreateWithURL((CFURLRef)absURL, nil);
+    CGImageSourceRef isrc = CGImageSourceCreateWithURL((__bridge CFURLRef)absURL, nil);
     if (isrc)
     {
-        type = [[(NSString*)CGImageSourceGetType(isrc) retain] autorelease];
+        type = (__bridge NSString*)CGImageSourceGetType(isrc);
         CFRelease(isrc);
     }
     return type;
@@ -129,11 +129,12 @@ static NSString* ImageIOLocalizedString (NSString* key)
 // and HFS file type strings of the sort returned by NSFileTypeForHFSTypeCode().
 // In this app, 'typeName' is a UTI type so we can call UTTypeCopyDeclaration().
 //
+
 - (NSArray*) fileExtensionsFromType:(NSString *)typeName;
 {
     NSArray* readExts = nil;
     
-    CFDictionaryRef utiDecl = UTTypeCopyDeclaration((CFStringRef)typeName);
+    CFDictionaryRef utiDecl = UTTypeCopyDeclaration((__bridge CFStringRef)typeName);
     if (utiDecl)
     {
         CFDictionaryRef utiSpec = CFDictionaryGetValue(utiDecl, kUTTypeTagSpecificationKey);
@@ -142,9 +143,9 @@ static NSString* ImageIOLocalizedString (NSString* key)
             CFTypeRef  ext = CFDictionaryGetValue(utiSpec, kUTTagClassFilenameExtension);
 
             if (ext && CFGetTypeID(ext) == CFStringGetTypeID())
-                readExts = [NSArray arrayWithObject:(id)ext];
+                readExts = [NSArray arrayWithObject:(__bridge id)ext];
             if (ext && CFGetTypeID(ext) == CFArrayGetTypeID())
-                readExts = [NSArray arrayWithArray:(id)ext];
+                readExts = [NSArray arrayWithArray:(__bridge id)ext];
         }
         CFRelease(utiDecl);
     }

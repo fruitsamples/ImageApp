@@ -44,7 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+Copyright © 2005-2012 Apple Inc. All Rights Reserved.
 
 Change History (most recent first):
             1/08   added CFRelease() call to setURL: method to fix leak
@@ -73,7 +73,6 @@ static NSString* ImageIOLocalizedString (NSString* key)
 - (void) dealloc
 {
     [self setImage:nil];
-    [super dealloc];
 }
 
 
@@ -178,9 +177,7 @@ ImageInfoPanel*  gSharedInfoPanel = nil;
 
 - (void) dealloc
 {
-    [mUrl release];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [super dealloc];
 }
 
 
@@ -189,7 +186,7 @@ ImageInfoPanel*  gSharedInfoPanel = nil;
 //
 - (NSArray*) propTree:(NSDictionary*)branch
 {
-    NSMutableArray* tree = [[[NSMutableArray alloc] init] autorelease];
+    NSMutableArray* tree = [[NSMutableArray alloc] init];
     unsigned int i, count = [branch count];
 
     for (i=0; i<count; i++)
@@ -220,20 +217,26 @@ ImageInfoPanel*  gSharedInfoPanel = nil;
 //
 - (void) setURL:(NSURL*)url
 {
+    if (nil == url) {
+        return;
+    }
+    
     if ([url isEqual:mUrl])
         return;
     
-    [mUrl autorelease];
-    mUrl = [url retain];
+    mUrl = url;
+    
+    CGImageSourceRef source = NULL;
+    
+    if (url) source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
 
-    CGImageSourceRef source = CGImageSourceCreateWithURL((CFURLRef)url, NULL);
+//    CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
     if (source)
     {
         // get image properties (height, width, depth, metadata etc.) for display
-        NSDictionary* props = (NSDictionary*) CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
+        NSDictionary* props = (__bridge_transfer NSDictionary*) CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
         [mTree setContent:[self propTree:props]];
-        [props release];
-
+        
         // image thumbnail options
         NSDictionary* thumbOpts = [NSDictionary dictionaryWithObjectsAndKeys:
                         (id)kCFBooleanTrue, (id)kCGImageSourceCreateThumbnailWithTransform,
@@ -242,7 +245,7 @@ ImageInfoPanel*  gSharedInfoPanel = nil;
                         nil];
                     
         // make image thumbnail
-        CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, (CFDictionaryRef)thumbOpts);
+        CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, (__bridge CFDictionaryRef)thumbOpts);
         [mThumbView setImage:image];
         CGImageRelease(image);
         
@@ -250,15 +253,15 @@ ImageInfoPanel*  gSharedInfoPanel = nil;
         [mFilePath setStringValue:[mUrl path]];
         
         // set image type string for image info panel
-        NSString* uti = (NSString*)CGImageSourceGetType(source);
+        NSString* uti = (__bridge NSString*)CGImageSourceGetType(source);
         [mFileType setStringValue:[NSString stringWithFormat:@"%@\n%@",
                         ImageIOLocalizedString(uti), uti]];
         
         // set image size string for image info panel
         CFDictionaryRef fileProps = CGImageSourceCopyProperties(source, nil);
         [mFileSize setStringValue:[NSString stringWithFormat:@"%@ bytes",
-            (id)CFDictionaryGetValue(fileProps, kCGImagePropertyFileSize)]];
-            
+            (__bridge id)CFDictionaryGetValue(fileProps, kCGImagePropertyFileSize)]];
+        CFRelease(fileProps);
         CFRelease(source);
     }
     else  // couldn't make image source for image, so display nothing

@@ -44,7 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+Copyright © 2005-2011 Apple Inc. All Rights Reserved.
 
 */
 
@@ -56,7 +56,7 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 #import "ImageView.h"
 #import "ImageFilter.h"
 
-@interface ImageDoc : NSDocument
+@interface ImageDoc : NSDocument <NSWindowDelegate>
 {
     IBOutlet ImageView*			mImageView;
     IBOutlet NSSlider*			mExposureSlider;
@@ -83,12 +83,35 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 
 - (CGAffineTransform) imageTransform;
 - (CIImage*) currentCIImageWithTransform:(CGAffineTransform)ctm;
-- (CGImageRef) currentCGImage;
 - (CGSize) imageSize;
 
 - (void) setupExposure;
 - (void) setupSaturation;
 
 - (BOOL) switchState;
+
+- (NSNumber*) exposure;
+
+- (Profile*) profile;
+
+- (NSArray*) profiles;
+
+- (NSNumber*) saturation;
+
+- (int) saveCompression;
+
+- (NSNumber*) saveQuality;
+
+- (int) saveTab;
+
+- (NSString*) saveType;
+
+- (NSArray*) saveTypes;
+
+- (void) drawImage:(CGContextRef) drawContext imageRect:(CGRect)drawImageRect;
+- (BOOL) writeImageToURL:(NSURL *)absURL ofType:(NSString *)typeName error:(NSError **)outError;
+- (BOOL) writeToURL:(NSURL *)absURL ofType:(NSString *)typeName forSaveOperation:(NSSaveOperationType)saveOp 
+originalContentsURL:(NSURL *)absOrigURL error:(NSError **)outError;
++ (NSArray *) filterUndeclaredTypes:(NSArray *)supportedTypes;
 
 @end

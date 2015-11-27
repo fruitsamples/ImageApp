@@ -44,7 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+Copyright © 2005-2012 Apple Inc. All Rights Reserved.
 
 */
 
@@ -57,19 +57,11 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 
 - (id) initWithFrame:(NSRect)frame document:(ImageDoc*)imageDoc
 {
-    if (self = [super initWithFrame:frame])
-        mImageDoc  = [imageDoc retain];
+    if ((self = [super initWithFrame:frame])!= nil)
+        mImageDoc  = imageDoc;
 
     return self;
 }
-
-
-- (void) dealloc
-{
-    [mImageDoc release];
-    [super dealloc];
-}
-
 
 - (NSString *) printJobTitle
 {
@@ -81,58 +73,52 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 {
     // FYI: rect is a scaled and clipped to the page boundaries part of the 
     // document [printInfo imageablePageBounds]
-
-    CGImageRef image = [mImageDoc currentCGImage];
-
-    if (image)
-    {
-        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
-
-        CGContextSaveGState(context);
-
-        float scale, xScale, yScale;
-
-        CGSize  imageSize;
-        NSRect  printableRect = NSIntegralRect([self frame]);
-
-        CGRect  imageRect = {{0,0}, {CGImageGetWidth(image), CGImageGetHeight(image)}};
-
-        // adjust for orientation and non-symetric DPI of the image
-
-        CGAffineTransform imTransform = [mImageDoc imageTransform];
-
-        imageSize = CGRectApplyAffineTransform(imageRect, imTransform).size;
-
-        // find the scale to fit
-
-        xScale = printableRect.size.width  / imageSize.width;
-        yScale = printableRect.size.height / imageSize.height;
-        scale = MIN(xScale, yScale);
-
-        // adjust the image transform
-
-        imTransform = CGAffineTransformConcat(imTransform, CGAffineTransformMakeScale(scale,scale));
-
-        // center the image
-        
-        float tx = (printableRect.size.width - imageSize.width * scale)  / 2.
-                  + printableRect.origin.x;
-        float ty = (printableRect.size.height - imageSize.height* scale) / 2.
-                  + printableRect.origin.y;
-
-        imTransform.tx += tx;
-        imTransform.ty += ty;
-
-        // adjust transform
-        CGContextConcatCTM(context, imTransform);
-        
-        // draw!
-        CGContextDrawImage (context, imageRect, image);
-        
-        CGContextRestoreGState(context);
-        
-        CGImageRelease(image);
-    }
+    
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    
+    CGContextSaveGState(context);
+    
+    float scale, xScale, yScale;
+    
+    CGSize  imageSize;
+    NSRect  printableRect = NSIntegralRect([self frame]);
+    
+    imageSize = [mImageDoc imageSize];
+    CGRect  imageRect = {{0,0}, {imageSize.width, imageSize.height}};
+    
+    // adjust for orientation and non-symetric DPI of the image
+    
+    CGAffineTransform imTransform = [mImageDoc imageTransform];
+    
+    imageSize = CGRectApplyAffineTransform(imageRect, imTransform).size;
+    
+    // find the scale to fit
+    
+    xScale = printableRect.size.width  / imageSize.width;
+    yScale = printableRect.size.height / imageSize.height;
+    scale = MIN(xScale, yScale);
+    
+    // adjust the image transform
+    
+    imTransform = CGAffineTransformConcat(imTransform, CGAffineTransformMakeScale(scale,scale));
+    
+    // center the image
+    
+    float tx = (printableRect.size.width - imageSize.width * scale)  / 2.
+    + printableRect.origin.x;
+    float ty = (printableRect.size.height - imageSize.height* scale) / 2.
+    + printableRect.origin.y;
+    
+    imTransform.tx += tx;
+    imTransform.ty += ty;
+    
+    // adjust transform
+    CGContextConcatCTM(context, imTransform);
+    
+    // draw!
+    [mImageDoc  drawImage:context imageRect:imageRect];
+    
+    CGContextRestoreGState(context);
 }
 
 @end

@@ -44,7 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+Copyright © 2005-2012 Apple Inc. All Rights Reserved.
 
 */
 
@@ -61,25 +61,17 @@ static const float  kMargin = 10;
 - (void) dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [super dealloc];
 }
 
 - (id) initWithFrame:(NSRect)frameRect
 {
-    [super initWithFrame:frameRect];
+    self = [super initWithFrame:frameRect];
 
     [[NSNotificationCenter defaultCenter]
         addObserver: self selector: @selector(newScreenProfile:)
         name: NSWindowDidChangeScreenProfileNotification object:nil];
 
     return self;
-}
-
-// Get the CGDirectDisplayID from the device description dictionary for the screen device
-//
-- (CMDisplayIDType) displayID
-{
-    return (CMDisplayIDType)[[[[[self window] screen] deviceDescription] objectForKey:@"NSScreenNumber"] longValue];
 }
 
 // This view completely covers its frame rectangle when drawing so return YES. 
@@ -102,34 +94,29 @@ static const float  kMargin = 10;
     NSSize destSize = NSInsetRect([self bounds], kMargin, kMargin).size;
 
     // scale to fit in view rect
-    float scale = MIN(destSize.width/ctmdSize.width, destSize.height/ctmdSize.height);
+    CGFloat scale = MIN(destSize.width/ctmdSize.width, destSize.height/ctmdSize.height);
     ctm = CGAffineTransformConcat(ctm, CGAffineTransformMakeScale(scale,scale));
 
     return ctm;
 }
 
-
 - (void) drawImage
 {
-    CGContextRef context = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-    if (context==nil)
-        return;
-
-    CGImageRef image = [mImageDoc currentCGImage];
-    if (image==nil)
-        return;
-
     NSRect viewBounds = [self bounds];
     CGRect imageRect = {{0,0}, [mImageDoc imageSize]};
-
+    
     // get transform matrix to fit image to view
     CGAffineTransform ctm = [self imageTransformToFitView];
-
+    
     // center in view rect
     CGSize ctmdSize = CGRectApplyAffineTransform(imageRect, ctm).size;
     ctm.tx += viewBounds.origin.x + (viewBounds.size.width - ctmdSize.width)/2;
     ctm.ty += viewBounds.origin.y + (viewBounds.size.height - ctmdSize.height)/2;
-
+    
+    CGContextRef context = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+    if (context==nil)
+        return;
+    
     // Concatenate the current graphics state's transformation matrix (the CTM)
     // with the affine transform `ctm'
     CGContextConcatCTM(context, ctm);
@@ -139,11 +126,8 @@ static const float  kMargin = 10;
     CGContextSetInterpolationQuality(context, q);
     
     // now draw using updated transform
-    CGContextDrawImage(context, imageRect, image);
-
-    CGImageRelease(image);
+    [mImageDoc  drawImage:context imageRect:imageRect];
 }
-
 
 - (void) drawCIImage
 {

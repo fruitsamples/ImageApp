@@ -6,8 +6,8 @@ Abstract: Interface file for ImageApp.h
 
 Version: <1.0>
 
-Disclaimer: IMPORTANT:  This Apple software is supplied to you by Apple
-Computer, Inc. ("Apple") in consideration of your agreement to the
+Disclaimer: IMPORTANT:  This Apple software is supplied to you by 
+Apple Inc. ("Apple") in consideration of your agreement to the
 following terms, and your use, installation, modification or
 redistribution of this Apple software constitutes acceptance of these
 terms.  If you do not agree with these terms, please do not use,
@@ -21,8 +21,8 @@ Software, with or without modifications, in source and/or binary forms;
 provided that if you redistribute the Apple Software in its entirety and
 without modifications, you must retain this notice and the following
 text and disclaimers in all such redistributions of the Apple Software. 
-Neither the name, trademarks, service marks or logos of Apple Computer,
-Inc. may be used to endorse or promote products derived from the Apple
+Neither the name, trademarks, service marks or logos of Apple Inc. 
+may be used to endorse or promote products derived from the Apple
 Software without specific prior written permission from Apple.  Except
 as expressly stated in this notice, no other rights or licenses, express
 or implied, are granted by Apple herein, including but not limited to
@@ -43,14 +43,14 @@ MODIFICATION AND/OR DISTRIBUTION OF THE APPLE SOFTWARE, HOWEVER CAUSED
 AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
-
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+ 
+ Copyright (C) 2005 - 2011 Apple Inc. All Rights Reserved.
 
 */
 
 #import <AppKit/AppKit.h>
 
-@interface ImageApp : NSApplication
+@interface ImageApp : NSApplication  <NSApplicationDelegate>
 {
 }
 

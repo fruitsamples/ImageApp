@@ -44,10 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
-
-Change History (most recent first):
-            1/08   added CFRelease() call to profiles: method to fix leak
+Copyright © 2005-2012 Apple Inc. All Rights Reserved.
 
 */
 
@@ -80,12 +77,13 @@ static NSString* ImageIOLocalizedString (NSString* key)
 
 @implementation ImageDoc
 
+
 // Return the names of the types for which this class can be instantiated to play the 
 // Editor or Viewer role.  
 //
 + (NSArray*) readableTypes
-{
-    return [(NSArray*)CGImageSourceCopyTypeIdentifiers() autorelease];
+{    
+    return ([self filterUndeclaredTypes:(__bridge_transfer NSArray*)CGImageSourceCopyTypeIdentifiers()]);
 }
 
 
@@ -95,7 +93,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
 //
 + (NSArray*) writableTypes
 {
-    return [(NSArray*)CGImageDestinationCopyTypeIdentifiers() autorelease];
+    return (__bridge_transfer NSArray*)CGImageDestinationCopyTypeIdentifiers();
 }
 
 
@@ -106,27 +104,32 @@ static NSString* ImageIOLocalizedString (NSString* key)
     return [[self writableTypes] containsObject:type];
 }
 
+// Given a list of supported UTIs, filter out any undeclared image types.
++(NSArray *) filterUndeclaredTypes:(NSArray *)supportedTypes
+{
+    NSMutableArray *filteredTypes = [NSMutableArray arrayWithCapacity:0];    
+
+    [supportedTypes enumerateObjectsUsingBlock:^(id obj, NSUInteger index, BOOL *stop)
+     {
+         BOOL supported = [[NSWorkspace sharedWorkspace] type:obj conformsToType:(NSString *)kUTTypeImage];
+         if (supported) 
+         {
+             [filteredTypes addObject:obj];
+         }
+     }];
+    
+    return filteredTypes;
+}
 
 - (void) dealloc
 {
     CGImageRelease(mImage);
     if (mMetadata) CFRelease(mMetadata);
     
-    [mFilteredImage release];
-    
-    [mExposureValue release];
-    [mSaturationValue release];
-    [mProfileValue release];
-    
-    [mProfiles release];
-
-    [mSaveUTI release];
     if (mSaveMetaAndOpts) CFRelease(mSaveMetaAndOpts);
 
     [[self undoManager] removeAllActionsWithTarget: self];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-
-    [super dealloc];
 }
 
 
@@ -143,29 +146,29 @@ static NSString* ImageIOLocalizedString (NSString* key)
     if (mProfiles == nil)
     {
         NSArray* profArray = [Profile arrayOfAllProfiles];
-        CFIndex i, count = [profArray count];
-        NSMutableArray* profs = [NSMutableArray arrayWithCapacity:0];
-        
-        for (i=0; i<count; i++)
-        {
-            // check profile space and class
-            Profile* prof = (Profile*)[profArray objectAtIndex:i];
-            OSType pSpace = [prof spaceType];
-            OSType pClass = [prof classType];
-
-            // look only for image profiles with RGB, CMYK and Gray color spaces,
-            // and only monitor and printer profiles
-            if ((pSpace==cmRGBData || pSpace==cmCMYKData || pSpace==cmGrayData) && 
-                (pClass==cmDisplayClass || pClass==cmOutputClass) && [prof description])
-                [profs addObject:prof];
+        if (profArray) 
+        {            
+            CFIndex i, count = [profArray count];
+            NSMutableArray* profs = [NSMutableArray arrayWithCapacity:0];
+            
+            for (i=0; i<count; i++)
+            {
+                // check profile space and class
+                Profile* prof = (Profile*)[profArray objectAtIndex:i];
+                icColorSpaceSignature pSpace = [prof spaceType];
+                icProfileClassSignature pClass = [prof classType];
+                
+                // look only for image profiles with RGB, CMYK and Gray color spaces,
+                // and only monitor and printer profiles
+                if ((pSpace == icSigRgbData || pSpace == icSigCmykData || pSpace == icSigGrayData) && 
+                    (pClass == icSigDisplayClass || pClass == icSigOutputClass) && [prof description])
+                    [profs addObject:prof];
+            }            
+            mProfiles = profs;
         }
-
-        [profArray release];
-        mProfiles = [profs retain];
     }
     return mProfiles;
 }
-
 
 // getter for image effects state (on or off)
 - (BOOL) switchState
@@ -204,8 +207,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
         [[self undoManager] setActionName:[mSwitchValue intValue]?@"Disable Effects":@"Enable Effects"];
     }
     
-    [mSwitchValue release];
-    mSwitchValue = [val retain];
+    mSwitchValue = val;
     [mImageView setNeedsDisplay:YES];
 }
 
@@ -223,8 +225,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
         [[self undoManager] setActionName:@"Exposure"];
     }
 
-    [mExposureValue release];
-    mExposureValue = [val retain];
+    mExposureValue = val;
     [mFilteredImage setExposure:mExposureValue];
     [mImageView setNeedsDisplay:YES];
 }
@@ -243,8 +244,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
         [[self undoManager] setActionName:@"Saturation"];
     }
     
-    [mSaturationValue release];
-    mSaturationValue = [val retain];
+    mSaturationValue = val;
     [mFilteredImage setSaturation:mSaturationValue];
     [mImageView setNeedsDisplay:YES];
 }
@@ -263,8 +263,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
         [[self undoManager] setActionName:[[mProfilePopup selectedItem] title]];
     }
     
-    [mProfileValue release];
-    mProfileValue = [val retain];
+    mProfileValue = val;
     [mFilteredImage setProfile:mProfileValue];
     [mImageView setNeedsDisplay:YES];
 }
@@ -304,7 +303,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
     [self setSwitchState:[NSNumber numberWithBool:FALSE]];
     [self setupExposure];
     [self setupSaturation];
-    [self setProfile:[Profile profileWithGenericRGB]];
+    [self setProfile:[Profile profileWithSRGB]];
     
     // Un-dirty the file and remove any undo state
     [self updateChangeCount:NSChangeCleared];
@@ -318,7 +317,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
 //
 - (float) dpiWidth
 {
-    NSNumber* val = [(NSDictionary*)mMetadata objectForKey:(id)kCGImagePropertyDPIWidth];
+    NSNumber* val = [(__bridge NSDictionary*)mMetadata objectForKey:(id)kCGImagePropertyDPIWidth];
     float  f = [val floatValue];
     return (f==0 ? 72 : f); // return default 72 if none specified
 }
@@ -328,7 +327,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
 //
 - (float) dpiHeight
 {
-    NSNumber* val = [(NSDictionary*)mMetadata objectForKey:(id)kCGImagePropertyDPIHeight];
+    NSNumber* val = [(__bridge NSDictionary*)mMetadata objectForKey:(id)kCGImagePropertyDPIHeight];
     float  f = [val floatValue];
     return (f==0 ? 72 : f); // return default 72 if none specified
 }
@@ -350,7 +349,7 @@ static NSString* ImageIOLocalizedString (NSString* key)
     //  7 =  row 0 rhs, col 0 bot  =  rot 90, flip vert
     //  8 =  row 0 lhs, col 0 bot  =  rotate -90
     
-    NSNumber* val = [(NSDictionary*)mMetadata objectForKey:(id)kCGImagePropertyOrientation];
+    NSNumber* val = [(__bridge NSDictionary*)mMetadata objectForKey:(id)kCGImagePropertyOrientation];
     int orient = [val intValue];
     if (orient<1 || orient>8)
         orient = 1;
@@ -398,22 +397,23 @@ static NSString* ImageIOLocalizedString (NSString* key)
 }
 
 
-// getter for current CGImage
-//
-- (CGImageRef) currentCGImage
-{
-    if ([self switchState])
-        return [mFilteredImage createCGImage];
-    else
-        return CGImageRetain(mImage);
-}
-
-
 // getter for image size
 //
 - (CGSize) imageSize
 {
     return CGSizeMake(CGImageGetWidth(mImage), CGImageGetHeight(mImage));
+}
+
+
+// Draw the document image
+
+- (void) drawImage:(CGContextRef) drawContext imageRect:(CGRect)drawImageRect
+{
+    // image effects turned on?
+    if ([self switchState])
+        [mFilteredImage drawFilteredImage:drawContext imageRect:drawImageRect];
+    else
+        CGContextDrawImage(drawContext, drawImageRect, mImage);
 }
 
 
@@ -434,24 +434,23 @@ static NSString* ImageIOLocalizedString (NSString* key)
 
 - (BOOL) readFromURL:(NSURL *)absURL ofType:(NSString *)typeName error:(NSError **)outError
 {
-    BOOL status = NO;
+    BOOL status = YES;
     
     // Release and clear any old image variables
     
-    [mFilteredImage release];
     mFilteredImage = nil;
-        
+    
     if (mMetadata) CFRelease(mMetadata);
     mMetadata = nil;
-
+    
     CGImageRelease(mImage);
     mImage = nil;
-
+    
     // Load (or reload) the image
-    CGImageSourceRef source = CGImageSourceCreateWithURL((CFURLRef)absURL, NULL);
-    if (source == nil)
-        goto bail;
-
+    CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)absURL, NULL);
+    if (!source)
+        status = NO;
+    
     // build options dictionary for image creation that specifies: 
     //
     // kCGImageSourceShouldCache = kCFBooleanTrue
@@ -460,31 +459,92 @@ static NSString* ImageIOLocalizedString (NSString* key)
     // kCGImageSourceShouldAllowFloat = kCFBooleanTrue
     //      Specifies that image should be returned as a floating
     //      point CGImageRef if supported by the file format.
-
-    NSDictionary* options = [NSDictionary dictionaryWithObjectsAndKeys:
-                    (id)kCFBooleanTrue, (id)kCGImageSourceShouldCache,
-                    (id)kCFBooleanTrue, (id)kCGImageSourceShouldAllowFloat,
-                    nil];
-
-    CGImageRef image = CGImageSourceCreateImageAtIndex(source, 0, (CFDictionaryRef)options);
     
-    // Assign user preferred default profiles if image is not tagged with a profile
-    mImage = CGImageCreateCopyWithDefaultSpace(image);
+    CGImageRef image = nil;
+    NSDictionary* options = nil;
+    
+    if (status)
+    {
+        options = [NSDictionary dictionaryWithObjectsAndKeys:
+                                 (id)kCFBooleanTrue, (id)kCGImageSourceShouldCache,
+                                 (id)kCFBooleanTrue, (id)kCGImageSourceShouldAllowFloat,
+                                 nil];
+        
+        image = CGImageSourceCreateImageAtIndex(source, 0, (__bridge CFDictionaryRef)options);
+        
+        // Assign user preferred default profiles if image is not tagged with a profile
+        if (!image)
+            status = NO;
+    }
+    
+    if (status)
+    {
+        mImage = nil;
+        
+        Profile* dfltRGB  = [Profile profileDefaultRGB];
+        Profile* dfltGray = [Profile profileDefaultGray];
+        Profile* dfltCMYK = [Profile profileDefaultCMYK];
+        
+        CGColorSpaceRef devRGB  = CGColorSpaceCreateDeviceRGB();
+        CGColorSpaceRef devGray = CGColorSpaceCreateDeviceGray();
+        CGColorSpaceRef devCMYK = CGColorSpaceCreateDeviceCMYK();
+        
+        if (dfltRGB && CFEqual(devRGB,CGImageGetColorSpace(image)))
+            mImage = CGImageCreateCopyWithColorSpace(image, [dfltRGB colorspace]);
+        if (dfltGray && CFEqual(devGray,CGImageGetColorSpace(image)))
+            mImage = CGImageCreateCopyWithColorSpace(image, [dfltGray colorspace]);
+        if (dfltCMYK && CFEqual(devCMYK,CGImageGetColorSpace(image)))
+            mImage = CGImageCreateCopyWithColorSpace(image, [dfltCMYK colorspace]);
+        
+        if (mImage == nil)
+            mImage = CGImageRetain(image);
+        
+        if (!mImage) 
+        {
+            status = NO;
+        }
+        
+        CFRelease(devRGB);
+        CFRelease(devGray);
+        CFRelease(devCMYK);
+    }
+    
+    if (status) 
+    {
+        mMetadata = (CFMutableDictionaryRef)CGImageSourceCopyPropertiesAtIndex(source, 0, (__bridge CFDictionaryRef)options);
+        if (!mMetadata) 
+        {
+            status = NO;
+        }
+    }
 
-    mMetadata = (CFMutableDictionaryRef)CGImageSourceCopyPropertiesAtIndex(source, 0, (CFDictionaryRef)options);
-
-    mFilteredImage = [(ImageFilter*)[ImageFilter alloc] initWithImage:mImage];
-
-    CFRelease(source);
-    CGImageRelease(image);
+    if (status) {
+        mFilteredImage = [(ImageFilter*)[ImageFilter alloc] initWithImage:mImage];
+        if (!mFilteredImage) 
+        {
+            status = NO;
+        }
+    }
+    
+    if (source) 
+    {
+        CFRelease(source);
+    }
+    
+    if (image) 
+    {
+        CGImageRelease(image);
+    }
     
     if (mImage != nil)
+    {
         status = YES;
-
-bail:
+    }
     
     if (status==NO && outError)
+    {
         *outError = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadCorruptFileError userInfo:nil];
+    }
     
     return status;
 }
@@ -511,7 +571,7 @@ bail:
     
         // save a dictionary of the image properties
         CFDictionaryRef tiffProfs = CFDictionaryGetValue(mSaveMetaAndOpts, kCGImagePropertyTIFFDictionary);
-CFShow(tiffProfs);
+
         CFMutableDictionaryRef tiffProfsMut;
         if (tiffProfs)
             tiffProfsMut = CFDictionaryCreateMutableCopy(nil, 0, tiffProfs);
@@ -522,9 +582,9 @@ CFShow(tiffProfs);
         CFRelease(tiffProfsMut);
         
         CFDictionarySetValue(mSaveMetaAndOpts, kCGImageDestinationLossyCompressionQuality, 
-                                    [NSNumber numberWithFloat:0.85]);
+                                    (__bridge const void *)[NSNumber numberWithFloat:0.85]);
     }
-    return (NSMutableDictionary*)mSaveMetaAndOpts;
+    return (__bridge NSMutableDictionary*)mSaveMetaAndOpts;
 }
 
 
@@ -551,7 +611,7 @@ CFShow(tiffProfs);
     if (mSaveUTI==nil)
     {
         if ([[ImageDoc writableTypes] containsObject:[self fileType]])
-            mSaveUTI = [[self fileType] retain];
+            mSaveUTI = [self fileType];
         else
             mSaveUTI = @"public.tiff";
     }
@@ -561,20 +621,22 @@ CFShow(tiffProfs);
 - (void) setSaveType:(NSString*)uti
 {
     [self willChangeValueForKey:@"saveTab"];
-    [mSaveUTI release];
-    mSaveUTI = [uti retain];
+    mSaveUTI = uti;
     [self didChangeValueForKey:@"saveTab"];
     
     // get the file extension so we can control file types shown
-    CFDictionaryRef utiDecl = UTTypeCopyDeclaration((CFStringRef)mSaveUTI);
+    CFDictionaryRef utiDecl = UTTypeCopyDeclaration((__bridge CFStringRef)mSaveUTI);
     CFDictionaryRef utiSpec = CFDictionaryGetValue(utiDecl, kUTTypeTagSpecificationKey);
     CFTypeRef ext = CFDictionaryGetValue(utiSpec, kUTTagClassFilenameExtension);
 
     NSSavePanel* savePanel = (NSSavePanel*)[mSavePanelView window];
     if (CFGetTypeID(ext) == CFStringGetTypeID())
-        [savePanel setRequiredFileType:(NSString*)ext];
+    {
+         NSArray* type = [NSArray arrayWithObject:(__bridge id) ext];
+        [savePanel setAllowedFileTypes:type];
+    }
     else
-        [savePanel setAllowedFileTypes:(NSArray*)ext];
+        [savePanel setAllowedFileTypes:(__bridge NSArray*)ext];
 
     CFRelease(utiDecl);
 }
@@ -711,38 +773,59 @@ CFShow(tiffProfs);
 }
 
 
-// This actually writes the file using CGImageDesination API
+// This actually writes the file using CGImageDestination API
 //
-- (BOOL) writeToURL:(NSURL *)absURL ofType:(NSString *)typeName forSaveOperation:(NSSaveOperationType)saveOp 
-         originalContentsURL:(NSURL *)absOrigURL error:(NSError **)outError
+- (BOOL) writeImageToURL:(NSURL *)absURL ofType:(NSString *)typeName error:(NSError **)outError
 {
-    BOOL status = NO;
+    BOOL success = YES;
+    CGImageDestinationRef dest = nil;
+
+    if (mImage==nil)
+        success = NO;
     
-    CGImageRef image = [self currentCGImage];
-    if (image==nil)
-        goto bail;
-
-    // Create an image destination writing to `url'
-    CGImageDestinationRef dest = CGImageDestinationCreateWithURL((CFURLRef)absURL, (CFStringRef)typeName, 1, nil);
-    if (dest==nil)
-        goto bail;
-
-    // Set the image in the image destination to be `image' with
-    // optional properties specified in saved properties dict.
-    CGImageDestinationAddImage(dest, image, (CFDictionaryRef)[self saveMetaAndOpts]);
-
-    status = CGImageDestinationFinalize(dest);
-
-    CGImageRelease(image);
-
-bail:
-
-    if (status==NO && outError)
+    if (success == YES) 
+    {
+        // Create an image destination writing to `url'
+        dest = CGImageDestinationCreateWithURL((__bridge CFURLRef)absURL, (__bridge CFStringRef)typeName, 1, nil);
+        if (dest==nil)
+            success = NO;
+    }
+    
+    if (success == YES) 
+    {
+        // Set the image in the image destination to be `image' with
+        // optional properties specified in saved properties dict.
+        CGImageDestinationAddImage(dest, mImage, (__bridge CFDictionaryRef)[self saveMetaAndOpts]);
+        
+        success = CGImageDestinationFinalize(dest);
+        
+        CFRelease(dest);
+    }
+    
+    
+    if (success==NO && outError)
         *outError = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileWriteUnknownError userInfo:nil];
     
-    return status;
+    return success; 
 }
 
+
+- (BOOL) writeToURL:(NSURL *)absURL ofType:(NSString *)typeName forSaveOperation:(NSSaveOperationType)saveOp 
+originalContentsURL:(NSURL *)absOrigURL error:(NSError **)outError
+{
+    BOOL success = YES;
+    
+    if ([self switchState])
+    {
+        return ([mFilteredImage writeImageToURL:absURL ofType:typeName properties:(CFDictionaryRef)[self saveMetaAndOpts] error:outError]);
+    }
+    else
+    {
+        return ([self writeImageToURL:absURL ofType:typeName error:outError]);
+    }
+    
+    return success;
+}
 
 #pragma mark -
 
@@ -755,8 +838,7 @@ bail:
     if (mPrintInfo == info)
         return;
     
-    [mPrintInfo autorelease];
-    mPrintInfo = [info copyWithZone:[self zone]];
+    mPrintInfo = [info copy];
 }
 
 
@@ -809,8 +891,6 @@ bail:
 
     if (outError) // Clear error.
         *outError = NULL;
-
-    [printView release];
 
     return printOp;
 }

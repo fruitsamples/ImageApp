@@ -44,7 +44,7 @@ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
 STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
-Copyright © 2005-2008 Apple Inc. All Rights Reserved.
+Copyright © 2005-2012 Apple Inc. All Rights Reserved.
 
 Change History (most recent first):
             1/08   added CFRelease() call to arrayOfAllProfilesWithSpace: 
@@ -57,53 +57,56 @@ Change History (most recent first):
 // Callback routine with a description of a profile that is 
 // called during an iteration through the available profiles.
 //
-static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
+static bool profileIterate (CFDictionaryRef profileInfo, void *userInfo)
 {
-    NSMutableArray* array = (NSMutableArray*) refCon;
+    NSMutableArray* array = (__bridge NSMutableArray*) userInfo;
 
-    Profile* prof = [Profile profileWithIterateData:info];
+    Profile* prof = [Profile profileWithIterateData:profileInfo];
     if (prof)
+    {
         [array addObject:prof];
-
-    return noErr;
+    }
+    
+    return true;
 }
-
-
 
 @implementation Profile
 
 // return an array of all profiles for the given color space
 //
-+ (NSArray*) arrayOfAllProfilesWithSpace:(OSType)space
++ (NSArray*) arrayOfAllProfilesWithSpace:(icColorSpaceSignature)space
 {
     CFIndex  i, count;
+    Profile* prof = nil;
+    NSMutableArray* profs = nil;
+    
     NSArray* profArray = [Profile arrayOfAllProfiles];
-    NSMutableArray* profs = [NSMutableArray arrayWithCapacity:0];
-
-    count = [profArray count];
-    for (i=0; i<count; i++)
+    if (profArray) 
     {
-        Profile* prof = (Profile*)[profArray objectAtIndex:i];
-        OSType  pClass = [prof classType];
+        profs = [NSMutableArray arrayWithCapacity:0];
         
-        if ([prof spaceType]==space && [prof description] && 
-            (pClass==cmDisplayClass || pClass==cmOutputClass))
-            [profs addObject:prof];
+        count = [profArray count];
+        for (i=0; i<count; i++)
+        {
+            prof = (Profile*)[profArray objectAtIndex:i];
+            icProfileClassSignature  pClass = [prof classType];
+            
+            if ([prof spaceType] == space && [prof description] && 
+                (pClass == icSigDisplayClass || pClass == icSigOutputClass))
+                [profs addObject:prof];
+        }        
     }
-
-    [profArray release];
     return profs;
 }
 
 // return an array of all profiles
 //
+
 + (NSArray*) arrayOfAllProfiles
 {
-    NSMutableArray* profs = [[NSMutableArray arrayWithCapacity:0] retain];
+    NSMutableArray* profs = [NSMutableArray arrayWithCapacity:0];
     
-    CMProfileIterateUPP iterUPP = NewCMProfileIterateUPP(profileIterate);
-    CMIterateColorSyncFolder(iterUPP, NULL, 0L, profs);
-    DisposeCMProfileIterateUPP(iterUPP);
+    ColorSyncIterateInstalledProfiles(profileIterate, NULL, (__bridge void *)profs, NULL);
 
     return (NSArray*)profs;
 }
@@ -112,7 +115,7 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
 //
 + (Profile*) profileDefaultRGB
 {
-    NSString* path = [[[NSUserDefaultsController sharedUserDefaultsController] defaults]
+    CFStringRef path = (__bridge CFStringRef)[[[NSUserDefaultsController sharedUserDefaultsController] defaults]
                         objectForKey:@"DefaultRGBProfile"];
     return [Profile profileWithPath:path];
 }
@@ -121,7 +124,7 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
 //
 + (Profile*) profileDefaultGray
 {
-    NSString* path = [[[NSUserDefaultsController sharedUserDefaultsController] defaults]
+    CFStringRef path = (__bridge CFStringRef)[[[NSUserDefaultsController sharedUserDefaultsController] defaults]
                         objectForKey:@"DefaultGrayProfile"];
     return [Profile profileWithPath:path];
 }
@@ -130,55 +133,54 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
 //
 + (Profile*) profileDefaultCMYK
 {
-    NSString* path = [[[NSUserDefaultsController sharedUserDefaultsController] defaults]
+    CFStringRef path = (__bridge CFStringRef)[[[NSUserDefaultsController sharedUserDefaultsController] defaults]
                         objectForKey:@"DefaultCMYKProfile"];
     return [Profile profileWithPath:path];
 }
 
-// build profile from Generic RGB
+// build profile from sRGB
 //
-+ (Profile*) profileWithGenericRGB
++ (Profile*) profileWithSRGB
 {
-    return [[[Profile alloc] initWithGenericRGB] autorelease];
+    return [[Profile alloc] initWithSRGB];
 }
 
 // build profile from Linear RGB
 //
 + (Profile*) profileWithLinearRGB
 {
-    return [[[Profile alloc] initWithLinearRGB] autorelease];
+    return [[Profile alloc] initWithLinearRGB];
 }
 
 // build profile from iterate data
 //
-+ (Profile*) profileWithIterateData:(CMProfileIterateData*) data
++ (Profile*) profileWithIterateData:(CFDictionaryRef) data
 {
-    return [[[Profile alloc] initWithIterateData:data] autorelease];
+    return [[Profile alloc] initWithIterateData:data];
 }
 
 // build profile from path
 //
-+ (Profile*) profileWithPath:(NSString*) path
++ (Profile*) profileWithPath:(CFStringRef)path
 {
-    return [[[Profile alloc] initWithPath:path] autorelease];
+    return [[Profile alloc] initWithCFPath:path];
 }
 
 // build profile from Generic RGB
 //
-- (Profile*) initWithGenericRGB
+- (Profile*) initWithSRGB
 {
-    mLocation.locType  = cmPathBasedProfile;
-    strcpy(mLocation.u.pathLoc.path, "/System/Library/ColorSync/Profiles/Generic RGB Profile.icc");
-    mClass = cmDisplayClass;
-    mSpace = cmRGBData;
+    mRef = ColorSyncProfileCreateWithName (kColorSyncSRGBProfile);
 
-    if (CMOpenProfile(&mRef, &mLocation) == noErr)
+    if (mRef)
     {
+        mURL = (CFURLRef) CFRetain (ColorSyncProfileGetURL (mRef, NULL));
+        mClass = icSigDisplayClass;
+        mSpace = icSigRgbData;
         return self;
     }
     else
     {
-        [self autorelease];
         return nil;
     }
 }
@@ -186,7 +188,7 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
 
 - (Profile*) initWithLinearRGB
 {
-    static const UInt8 data[0x220] = 
+    static const uint8_t bytes[0x220] = 
         "\x00\x00\x02\x20\x61\x70\x70\x6c\x02\x20\x00\x00\x6d\x6e\x74\x72"
         "\x52\x47\x42\x20\x58\x59\x5a\x20\x07\xd2\x00\x05\x00\x0d\x00\x0c"
         "\x00\x00\x00\x00\x61\x63\x73\x70\x41\x50\x50\x4c\x00\x00\x00\x00"
@@ -222,102 +224,113 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
         "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
         "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
 
-    mLocation.locType  = cmBufferBasedProfile;
-    mLocation.u.bufferLoc.buffer = (void*)data;
-    mLocation.u.bufferLoc.size = 0x220;
-    mClass = cmDisplayClass;
-    mSpace = cmRGBData;
+    CFDataRef data = CFDataCreateWithBytesNoCopy (NULL, bytes, sizeof (bytes), kCFAllocatorNull);
 
-    if (CMOpenProfile(&mRef, &mLocation) == noErr)
+    mRef = ColorSyncProfileCreate (data, NULL);
+
+    if (data) CFRelease (data);
+
+    if (mRef)
     {
+        mClass = icSigDisplayClass;
+        mSpace = icSigRgbData;
+
         return self;
     }
     else
     {
-        [self autorelease];
         return nil;
     }
 }
 
 
-- (Profile*) initWithIterateData:(CMProfileIterateData*) info
+- (Profile*) initWithIterateData:(CFDictionaryRef) data
 {
-    const size_t kMaxProfNameLen = 36;
-
-    mLocation  = info->location;
-    mClass = info->header.profileClass;
-    mSpace = info->header.dataColorSpace;
-
-    if (info->uniCodeNameCount > 1)
+    CFDataRef headerData = CFDictionaryGetValue (data, kColorSyncProfileHeader);
+        
+    if (headerData)
     {
-        CFIndex numChars = info->uniCodeNameCount - 1;
-        if (numChars > kMaxProfNameLen)
-            numChars = kMaxProfNameLen;
-        mName = [[NSString stringWithCharacters:info->uniCodeName length:numChars] retain];
+        icHeader* header = (icHeader*) CFDataGetBytePtr (headerData);
+        mClass = header->deviceClass;
+        mSpace = header->colorSpace;
     }
+
+    mURL = (CFURLRef) CFDictionaryGetValue (data, kColorSyncProfileURL);
+    if (mURL) CFRetain (mURL);
+
+    mName = (CFStringRef)CFDictionaryGetValue (data, kColorSyncProfileDescription);
+    if (mName) CFRetain (mName);
 
     return self;
 }
 
-
-- (Profile*) initWithPath:(NSString*) path
+- (Profile*) initWithCFPath:(CFStringRef) path
 {
     if (path)
     {
-        mPath = [path retain];
+        mURL = CFURLCreateWithFileSystemPath(NULL, path, kCFURLPOSIXPathStyle, 0);
         
-        mLocation.locType = cmPathBasedProfile;
-        strncpy(mLocation.u.pathLoc.path, [path fileSystemRepresentation], 255);
+        mRef = ColorSyncProfileCreateWithURL (mURL, NULL);
         
-        CMAppleProfileHeader header;
-        if (noErr==CMGetProfileHeader([self ref], &header))
+        if (mRef)
         {
-            mClass = header.cm2.profileClass;
-            mSpace = header.cm2.dataColorSpace;
-        }
-        else
-        {
-            [self autorelease];
-            return nil;
+            CFDataRef headerData = ColorSyncProfileCopyHeader (mRef);
+            
+            if (headerData)
+            {
+                icHeader* header = (icHeader*) CFDataGetBytePtr (headerData);
+                mClass = header->deviceClass;
+                mSpace = header->colorSpace;
+                CFRelease (headerData);
+                
+                return self;
+            }
         }
     }
 
-    return self;
+    return nil;
 }
 
 
 - (void) dealloc
 {
-    CMCloseProfile(mRef);
+    if (mRef) CFRelease(mRef);
     CGColorSpaceRelease(mColorspace);
-    [mName release];
-    [mPath release];
-    [super dealloc];
+    if (mName) CFRelease (mName);
+    if (mPath) CFRelease (mPath);
+    if (mURL) CFRelease(mURL);
 }
 
 
-- (CMProfileRef) ref
+- (ColorSyncProfileRef) ref
 {
     if (mRef == NULL)
-        (void) CMOpenProfile(&mRef, &mLocation);
-
+    {
+        mRef = ColorSyncProfileCreateWithURL (mURL, NULL);
+    }
+    
     return mRef;
 }
 
 
-- (CMProfileLocation*) location
+- (CFURLRef) url
 {
-    return &mLocation;
+    if (mURL == NULL)
+    {
+        mURL = (CFURLRef) ColorSyncProfileGetURL (mRef, NULL);
+     }
+     
+     return mURL;
 }
 
 
-- (OSType) classType
+- (icProfileClassSignature) classType
 {
     return mClass;
 }
 
 
-- (OSType) spaceType
+- (icColorSpaceSignature) spaceType
 {
     return mSpace;
 }
@@ -327,39 +340,38 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
 //
 - (NSString*) description
 {
-    if (mName==nil)
-        CMCopyProfileDescriptionString([self ref], (CFStringRef*) &mName);
-
-    return mName;
+    if (mName == nil)
+    {
+        mName = ColorSyncProfileCopyDescriptionString (mRef);
+    }
+    
+    return (__bridge NSString*) mName;
 }
 
 
 - (NSString*) path
 {
-    if (mPath == nil)
+    if (mPath == NULL)
     {
-        if (mLocation.locType == cmFileBasedProfile)
+        if (mURL == NULL)
         {
-            FSRef       fsref;
-            UInt8       path[1024];
-            if (FSpMakeFSRef(&(mLocation.u.fileLoc.spec), &fsref) == noErr &&
-                FSRefMakePath(&fsref, path, 1024) == noErr)
-                mPath = [[NSString stringWithUTF8String:(const char *)path] retain];
+           (void) [self url];
         }
-        else if (mLocation.locType == cmPathBasedProfile)
+        
+        if (mURL)
         {
-            mPath = [[NSString stringWithUTF8String:mLocation.u.pathLoc.path] retain];
+            mPath =  CFURLCopyPath (mURL);
         }
     }
 
-    return mPath;
+    return (__bridge NSString*)mPath;
 }
 
 
 - (BOOL) isEqual:(id)obj
 {
     if ([obj isKindOfClass:[self class]])
-        return [[self path] isEqualToString:[obj path]];
+        return [(NSString*)[self path] isEqualToString:(NSString*)[obj path]];
     return [super isEqual:obj];
 }
 
@@ -367,129 +379,18 @@ static OSErr profileIterate (CMProfileIterateData *info, void *refCon)
 - (CGColorSpaceRef) colorspace
 {
     if (mColorspace == nil)
-        mColorspace = CGColorSpaceCreateWithPlatformColorSpace([self ref]);
+        mColorspace = CGColorSpaceCreateWithPlatformColorSpace((void *)[self ref]);
     return mColorspace;
 }
 
 
-// Build a 3D lookup texture for use with soft-proofing
-// The resulting table is suitable for use in OpenGL to accelerate   
-// color management in hardware.
-//
-- (NSData*) dataForCISoftproofTextureWithGridSize:(size_t) grid
+- (id) valueForUndefinedKey:(NSString*)key
 {
-    NSData*				nsdata = nil;
-    NCMConcatProfileSet* set = nil;
-    size_t				count = (grid*grid*grid) * 4;
-    size_t              size;
-    UInt8*				data8 = nil;
-    CMWorldRef			cw = nil;
-    CMProfileRef		displayProf = nil;
-    Profile*			linRGB = nil;
-
-    // profile for transform
-    linRGB = [Profile profileWithLinearRGB];
-    if (linRGB == nil)
-        goto bail;
-
-    // specify size of resulting data
-    size = count * sizeof(float);
-    nsdata = [NSMutableData dataWithLength:size];
-    if (nsdata == nil)
-        goto bail;
-
-    // now build our color world transform
-    size = offsetof(NCMConcatProfileSet, profileSpecs[3]);
-    set = (NCMConcatProfileSet *) calloc(1, size);
-    if (set==nil)
-        goto bail;
-
-    set->cmm = 0000;
-    set->flagsMask = 0xFFFFFFFF;
-    set->profileCount  = 3;
-    set->flags = (cmBestMode) << 16 | cmGamutCheckingMask;
-
-    set->profileSpecs[0].profile = [linRGB ref];
-    set->profileSpecs[1].profile = [self ref];
-    set->profileSpecs[2].profile = [linRGB ref];
-
-    set->profileSpecs[0].renderingIntent = kUseProfileIntent;
-    set->profileSpecs[1].renderingIntent = kUseProfileIntent;
-    set->profileSpecs[2].renderingIntent = kUseProfileIntent;
-
-    set->profileSpecs[0].transformTag = kDeviceToPCS;
-    set->profileSpecs[1].transformTag = kPCSToPCS;
-    set->profileSpecs[2].transformTag = kPCSToDevice;
-
-    // Define a color world for color transformations among concatenated profiles.
-    if (NCWConcatColorWorld (&cw, set, nil, nil) != noErr)
-        goto bail;
-
-    size = count * sizeof(UInt8);
-    data8 = malloc(size);
-
-    // CWFillLookupTexture fills a 3d lookup texture from a colorworld.
-    // The resulting table is suitable for use in OpenGL to accelerate color management in 
-    // hardware.
-
-    //  cmTextureRGBtoRGBX8 = RGB to 8-bit RGBx texture
-
-    if (CWFillLookupTexture (cw, grid, cmTextureRGBtoRGBX8, size, data8) != noErr)
-        goto bail;
-
-    float* dataPtr = (float*) [(NSMutableData*)nsdata mutableBytes];
-    if (dataPtr == nil)
-        goto bail;
-
-    size_t i;
-    for (i=0; i<count; i++)
-        dataPtr[i] = (float)data8[i]/255.0;
-
-bail:
-
-    if (data8) free(data8);
-    if (displayProf) CMCloseProfile (displayProf);
-    if (cw) CWDisposeColorWorld(cw);
-    if (set) free(set);
-    return nsdata;
+    printf ("Called\n");
+    
+    return (id)CFSTR("0");
 }
-
 
 @end
-
-
-// Assign user preferred default profiles if image is not tagged with a profile
-//
-CGImageRef CGImageCreateCopyWithDefaultSpace (CGImageRef image)
-{
-    if (image==nil)
-        return nil;
-    
-    CGImageRef newImage = nil;
-
-    Profile* dfltRGB  = [Profile profileDefaultRGB];
-    Profile* dfltGray = [Profile profileDefaultGray];
-    Profile* dfltCMYK = [Profile profileDefaultCMYK];
-
-    CGColorSpaceRef devRGB  = CGColorSpaceCreateDeviceRGB();
-    CGColorSpaceRef devGray = CGColorSpaceCreateDeviceGray();
-    CGColorSpaceRef devCMYK = CGColorSpaceCreateDeviceCMYK();
-
-    if (dfltRGB && CFEqual(devRGB,CGImageGetColorSpace(image)))
-        newImage = CGImageCreateCopyWithColorSpace(image, [dfltRGB colorspace]);
-    if (dfltGray && CFEqual(devGray,CGImageGetColorSpace(image)))
-        newImage = CGImageCreateCopyWithColorSpace(image, [dfltGray colorspace]);
-    if (dfltCMYK && CFEqual(devCMYK,CGImageGetColorSpace(image)))
-        newImage = CGImageCreateCopyWithColorSpace(image, [dfltCMYK colorspace]);
-
-    if (newImage == nil)
-        newImage = CGImageRetain(image);
-
-    CFRelease(devRGB);
-    CFRelease(devGray);
-    CFRelease(devCMYK);
-
-    return newImage;
-}
 
 

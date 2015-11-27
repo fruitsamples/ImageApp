@@ -54,6 +54,7 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 #import "Profile.h"
 
 
+
 @interface ImageFilter : NSObject
 {
     CGImageRef		mImage;
@@ -71,6 +72,8 @@ Copyright © 2005-2008 Apple Inc. All Rights Reserved.
 - (void) setSaturation:(NSNumber*)saturation;
 
 - (CIImage*) imageWithTransform:(CGAffineTransform)ctm;
-- (CGImageRef) createCGImage;
+
+- (void) drawFilteredImage:(CGContextRef) drawContext imageRect:(CGRect)drawImageRect;
+- (BOOL) writeImageToURL:(NSURL *)absURL ofType:(NSString *)typeName properties:(CFDictionaryRef)properties error:(NSError **)outError;
 
 @end
